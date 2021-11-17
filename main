@@ -1,0 +1,136 @@
+def myNestedCrossVal(X,y, nFolds, ListLength):
+
+    '''
+    Description:
+        This function performs a nested cross validation and KNN analysis on a data matrix. 
+    
+    Args:
+        This function takes four parameters. 
+        
+        param X (DataFrame): This is the data matrix The second is the class labels (y).
+        param y (Series): Class labels.
+        param nFolds (int) : Number of folds .
+        param ListLength (int) : number of iterations that KNN is be be calculated for each distance. 
+        
+    Returns:
+        This function returns a print out of the following:
+        The k values and distance calculations performed for each validation fold.
+        The k value and distance type with the highest accuracy score on the validation fold.
+        The accuracy score and confustion matrix of using this k value and distance type on the test fold.
+    
+    Notes:
+        There is no distance parameter. This function calculates both the Euclidean and Manhattan distance.
+        
+    '''
+    
+    #Generating a random set of indicies based on the length of the data matrix X
+    
+    indices = np.random.permutation(np.arange(0,len(X),1))
+    indices = np.array_split(indices, nFolds)
+    
+    #The random set of indicies will be used to shuffle the data matrix into a testing set (testFold) and a training set (remaining_folds). 
+    #The training set will be split into two subsets called validation set (validationFold) and training set (remaining_folds_train)
+    #Note: the 'if / else' is needed because without it at nFolds = i, the validationFold and testFold will be equal (which we don't want)
+    
+    for i in range(0, nFolds):
+    
+        all_indices = np.concatenate(indices)
+    
+        if i < nFolds-1:
+            testFold = indices[i]
+            remaining_folds = np.delete(range(0,nFolds), i)
+            validationFold = indices[ remaining_folds[i] ]
+            remaining_folds = np.setdiff1d(all_indices, testFold)
+            remaining_folds_train = np.setdiff1d(remaining_folds, validationFold)
+        
+        else:
+            testFold = indices[i]
+            remaining_folds = np.delete(range(0,nFolds), i)
+            validationFold = indices[ remaining_folds[i - nFolds +1] ]
+            remaining_folds = np.setdiff1d(all_indices, testFold)
+            remaining_folds_train = np.setdiff1d(all_indices, validationFold)
+        
+        #Now using the indicies above to divide data matrix X into the necessary subsets.
+    
+        #Setting the test set
+        X_testFold = X.iloc[testFold]                       
+    
+        #Setting the training and validation sets
+        X_validation = X.iloc[validationFold]              
+        X_train = X.iloc[remaining_folds_train]                   
+    
+        #Setting the output labels
+        X_y_train = y.iloc[remaining_folds_train]        
+        X_y_test = y.iloc[validationFold]
+                                 
+        #Setting the final testing output labels and training data (will be used when the best hyperparameters are determined)                             
+        X_remaining = X.iloc[remaining_folds]
+        X_y_remaining = y.iloc[remaining_folds]
+        X_y_testFold = y.iloc[testFold]
+                      
+        print("")
+        print('Fold' ,i+1)
+        print('________________________________________________________')
+                      
+        #The accuracy, k value, and distance derived from each run of the KNN function on the validation and training sets
+        #will be stored in a DataFrame. The best hyper-parameters will be found by findng the maxium accuracy in 
+        #the DataFrame with its corresponing k value and distance (Euclidean or Manhattan)
+                      
+        dff = pd.DataFrame()
+        k_value =[]
+        acc_value = []
+        dist_value = []
+    
+        #running the KNN algoritm on the training / validation sets. After each iteration the accuracy, k value, and distance are
+        #stored in a list. After all the iterations are completed these lists are placed in the DataFrame. 
+        
+        #getting the Euclidean distance values
+        
+        k_list =[]
+        for i in range(ListLength):
+            k_list.append(i+1)
+    
+                      
+        for i in k_list:
+            y_pred = myKNN (X_train, X_y_train, X_validation, i, 'euclidean')
+            accuracy = (sum(x == y for x, y in zip(y_pred, X_y_test)) / len(X_y_test))*100
+            acc_value.append(accuracy)
+            dist_value.append('euclidean') 
+            k_value.append(i)
+
+        #getting the Manhattan distance values
+                          
+        for i in k_list: 
+            y_pred = myKNN (X_train, X_y_train, X_validation, i, 'manhattan')
+            accuracy = (sum(x == y for x, y in zip(y_pred, X_y_test)) / len(X_y_test))*100
+            acc_value.append(accuracy)
+            dist_value.append('manhattan')
+            k_value.append(i)
+    
+        print('Results of Accuracy for parameters on validation set')
+                      
+        #get the best hyper-parameters by finding the maximum value of the DataFrame for accuracy
+                          
+        dff = pd.DataFrame({'Accuracy' : acc_value, 'k value':k_value, 'Distance': dist_value})
+        print(dff)
+        max_index = dff['Accuracy'].idxmax()
+        print('')
+        print('Best parameters: k = ',dff['k value'].iloc[max_index], ' Distance = ',dff['Distance'].iloc[max_index], ' Accuracy = ' ,round(dff['Accuracy'].iloc[max_index], 2),'%')
+         
+        #Testing the best hyperparameters on with the test fold
+        #Get KNN on the test fold using the besy hyperparameters
+        
+        y_pred_final = myKNN (X_remaining, X_y_remaining, X_testFold, dff['k value'].iloc[max_index], dff['Distance'].iloc[max_index])
+        
+        accuracy_final = (sum(x == y for x, y in zip(y_pred_final, X_y_testFold)) / len(y_pred_final))*100
+        
+        print('')
+        print('Best hyper-parameters accuracy : ',round(accuracy_final, 2),'%')
+    
+        #Confusion Matrix using the best hyper-parameters on the testing fold
+        
+        print('')
+        print('Confusion Matrix using the best hyperparameters on the testing fold')
+        print('')
+
+        confusion_matrix(X_y_testFold, y_pred_final)
